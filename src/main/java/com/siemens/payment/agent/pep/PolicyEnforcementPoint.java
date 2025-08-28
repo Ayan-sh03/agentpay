@@ -12,9 +12,9 @@ public class PolicyEnforcementPoint {
     @Autowired
     private WebClient opaWebClient;
 
-    public Mono<Boolean> evaluatePolicy(PurchaseRequest request) {
+    public Mono<Boolean> evaluatePolicy(PurchaseRequest request, String userId) {
         // This is a simplified request to OPA. In a real scenario, you would send more context.
-        OpaRequest opaRequest = new OpaRequest(new OpaInput(request));
+        OpaRequest opaRequest = new OpaRequest(new OpaInput(request, userId));
 
         return opaWebClient.post()
                 .body(Mono.just(opaRequest), OpaRequest.class)
@@ -40,13 +40,31 @@ public class PolicyEnforcementPoint {
 
     private static class OpaInput {
         private final PurchaseRequest purchase;
+        private final User user;
 
-        public OpaInput(PurchaseRequest purchase) {
+        public OpaInput(PurchaseRequest purchase, String userId) {
             this.purchase = purchase;
+            this.user = new User(userId);
         }
 
         public PurchaseRequest getPurchase() {
             return purchase;
+        }
+
+        public User getUser() {
+            return user;
+        }
+    }
+
+    private static class User {
+        private final String id;
+
+        public User(String id) {
+            this.id = id;
+        }
+
+        public String getId() {
+            return id;
         }
     }
 

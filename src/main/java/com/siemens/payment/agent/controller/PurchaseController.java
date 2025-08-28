@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.validation.Valid;
+
 @RestController
 @RequestMapping("/api/v1")
 public class PurchaseController {
@@ -19,12 +21,12 @@ public class PurchaseController {
     private PurchaseService purchaseService;
 
     @PostMapping("/purchase")
-    public PurchaseResponse initiatePurchase(@RequestBody PurchaseRequest request) {
+    public PurchaseResponse initiatePurchase(@Valid @RequestBody PurchaseRequest request) {
         return purchaseService.processPurchase(request);
     }
 
     @PostMapping("/purchase/{transactionId}/override")
-    public PurchaseResponse overridePurchase(@PathVariable String transactionId, @RequestBody OverrideRequest overrideRequest) {
+    public PurchaseResponse overridePurchase(@PathVariable String transactionId, @Valid @RequestBody OverrideRequest overrideRequest) {
         return purchaseService.overridePurchase(transactionId, overrideRequest);
     }
 }

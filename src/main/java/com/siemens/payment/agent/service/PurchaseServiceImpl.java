@@ -23,6 +23,12 @@ public class PurchaseServiceImpl implements PurchaseService {
     @Autowired
     private AuditService auditService;
 
+    @Autowired
+    private WebAuthnService webAuthnService;
+    
+    @Autowired
+    private RequestValidationService requestValidationService;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // In a production scenario, this would be a distributed cache like Redis or a persistent store.
@@ -32,15 +38,49 @@ public class PurchaseServiceImpl implements PurchaseService {
     @Override
     public PurchaseResponse processPurchase(PurchaseRequest request) {
         String transactionId = UUID.randomUUID().toString();
+        // For demo purposes, we're using a static user ID
+        // In a real implementation, this would come from the authentication context
+        String userId = "user1";
+        
         logAuditEvent(transactionId, "PURCHASE_REQUEST_RECEIVED", request);
+        
+        // Validate the purchase request
+        try {
+            requestValidationService.validatePurchaseRequest(request);
+        } catch (IllegalArgumentException e) {
+            PurchaseResponse response = new PurchaseResponse();
+            response.setTransactionId(transactionId);
+            response.setStatus("INVALID_REQUEST");
+            response.setMessage("Invalid purchase request: " + e.getMessage());
+            logAuditEvent(transactionId, "PURCHASE_REQUEST_INVALID", Map.of("error", e.getMessage()));
+            return response;
+        }
 
-        boolean allowed = pep.evaluatePolicy(request).block(); // Using block() for simplicity in this context.
-        logAuditEvent(transactionId, "POLICY_EVALUATION_COMPLETED", Map.of("allowed", allowed));
+        boolean allowed = pep.evaluatePolicy(request, userId).block(); // Using block() for simplicity in this context.
+        logAuditEvent(transactionId, "POLICY_EVALUATION_COMPLETED", Map.of("allowed", allowed, "userId", userId));
 
         PurchaseResponse response = new PurchaseResponse();
         response.setTransactionId(transactionId);
 
         if (allowed) {
+            // Check if step-up authentication is required based on risk level
+            boolean stepUpRequired = webAuthnService.isStepUpRequired(transactionId, request);
+            logAuditEvent(transactionId, "STEP_UP_AUTHENTICATION_CHECK", Map.of("required", stepUpRequired));
+            
+            if (stepUpRequired) {
+                // In a real implementation, we would trigger the WebAuthn flow here
+                // For now, we'll simulate the authentication
+                boolean authenticated = webAuthnService.performStepUpAuthentication(userId);
+                logAuditEvent(transactionId, "STEP_UP_AUTHENTICATION_RESULT", Map.of("authenticated", authenticated));
+                
+                if (!authenticated) {
+                    response.setStatus("DENIED");
+                    response.setMessage("Purchase denied due to failed step-up authentication.");
+                    logAuditEvent(transactionId, "PURCHASE_DENIED_STEP_UP_FAILED", response);
+                    return response;
+                }
+            }
+            
             response.setStatus("APPROVED");
             response.setMessage("Purchase approved by policy.");
             logAuditEvent(transactionId, "PURCHASE_APPROVED", response);

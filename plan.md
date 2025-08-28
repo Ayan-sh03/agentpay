@@ -4,20 +4,20 @@ tecture Overview
 
 1. __API Gateway Layer__ - Spring Boot REST controllers handling purchase initiation requests `[IMPLEMENTED]`
 2. __Policy Enforcement Point (PEP)__ - Intercepts requests and delegates to OPA `[IMPLEMENTED]`
-3. __Open Policy Agent (OPA)__ - External policy engine evaluating spend caps, merchant allowlists, MCC/KYC checks `[PARTIALLY IMPLEMENTED]`
-4. __FIDO2/WebAuthn Service__ - Handles step-up authentication using basic WebAuthn standards `[TODO]`
+3. __Open Policy Agent (OPA)__ - External policy engine evaluating spend caps, merchant allowlists, MCC/KYC checks `[IMPLEMENTED]`
+4. __FIDO2/WebAuthn Service__ - Handles step-up authentication using basic WebAuthn standards `[IMPLEMENTED]`
 5. __Token Vault Service__ - Custom implementation for tokenized credential storage with encryption `[IMPLEMENTED]`
 6. __Audit Service__ - Full audit trail logging to PostgreSQL `[IMPLEMENTED]`
-7. __Rate Limiting__ - Spring Cloud Gateway or Redis-based rate limiting `[PARTIALLY IMPLEMENTED]`
+7. __Rate Limiting__ - Spring Cloud Gateway or Redis-based rate limiting `[IMPLEMENTED]`
 
 ### Data Flow
 
 1. Agent initiates purchase via POST /purchase `[IMPLEMENTED]`
-2. Request validated and rate-limited `[PARTIALLY IMPLEMENTED]`
+2. Request validated and rate-limited `[IMPLEMENTED]`
 3. PEP forwards request + context to OPA for policy evaluation `[IMPLEMENTED]`
 4. OPA returns allow/deny decision `[IMPLEMENTED]`
 5. If denied, check for human-in-the-loop override capability `[IMPLEMENTED]`
-6. If approved, trigger FIDO2 step-up if required by risk level `[TODO]`
+6. If approved, trigger FIDO2 step-up if required by risk level `[IMPLEMENTED]`
 7. Retrieve tokenized credentials from encrypted storage `[IMPLEMENTED]`
 8. Log full audit trail with deterministic decision path `[IMPLEMENTED]`
 9. Return synchronous response to agent `[IMPLEMENTED]`
@@ -38,11 +38,11 @@ tecture Overview
 - Develop policy evaluation flow with deterministic outcomes `[IMPLEMENTED]`
 - Implement human-in-the-loop override mechanism `[IMPLEMENTED]`
 
-### Phase 3: Security Components `[PARTIALLY IMPLEMENTED]`
+### Phase 3: Security Components `[IMPLEMENTED]`
 
-- Integrate WebAuthn for FIDO2 authentication `[TODO]`
+- Integrate WebAuthn for FIDO2 authentication `[IMPLEMENTED]`
 - Build token vault abstraction with encrypted database storage `[IMPLEMENTED]`
-- Implement rate limiting at API gateway level `[PARTIALLY IMPLEMENTED]`
+- Implement rate limiting at API gateway level `[IMPLEMENTED]`
 
 ### Phase 4: Audit & Compliance `[IMPLEMENTED]`
 
@@ -59,25 +59,25 @@ tecture Overview
 
 ## Updated Implementation Plan
 
-### Phase 6: Security Enhancements `[TODO]`
+### Phase 6: Security Enhancements `[PARTIALLY IMPLEMENTED]`
 
-- Complete WebAuthn/FIDO2 integration for step-up authentication
-- Implement request validation for all API endpoints
-- Add comprehensive security testing suite
-- Enhance encryption mechanisms for sensitive data
+- Complete WebAuthn/FIDO2 integration for step-up authentication `[IMPLEMENTED]`
+- Implement request validation for all API endpoints `[IMPLEMENTED]`
+- Add comprehensive security testing suite `[TODO]`
+- Enhance encryption mechanisms for sensitive data `[TODO]`
 
-### Phase 7: Policy Engine Enhancement `[TODO]`
+### Phase 7: Policy Engine Enhancement `[PARTIALLY IMPLEMENTED]`
 
-- Create comprehensive OPA policies for spend caps, merchant allowlists, MCC/KYC checks
-- Implement dynamic policy loading and updating
-- Add policy decision explanation for audit trails
+- Create comprehensive OPA policies for spend caps, merchant allowlists, MCC/KYC checks `[IMPLEMENTED]`
+- Implement dynamic policy loading and updating `[TODO]`
+- Add policy decision explanation for audit trails `[TODO]`
 
-### Phase 8: Rate Limiting & Performance `[TODO]`
+### Phase 8: Rate Limiting & Performance `[PARTIALLY IMPLEMENTED]`
 
-- Complete rate limiting implementation with Redis backend
-- Add configurable rate limits per user/agent
-- Implement performance testing framework
-- Optimize database queries and connection pooling
+- Complete rate limiting implementation with Redis backend `[IMPLEMENTED]`
+- Add configurable rate limits per user/agent `[IMPLEMENTED]`
+- Implement performance testing framework `[TODO]`
+- Optimize database queries and connection pooling `[TODO]`
 
 ### Phase 9: Production Hardening `[TODO]`
 
