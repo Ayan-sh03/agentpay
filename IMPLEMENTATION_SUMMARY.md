@@ -15,16 +15,24 @@ This document summarizes the features implemented in this phase of the Payment A
   - User-specific spend caps
   - Merchant allowlists
   - KYC verification requirements
+  - Policy decision explanations
 - Updated PolicyEnforcementPoint to include user context in policy evaluation
 - Modified PurchaseServiceImpl to pass user ID to policy evaluation
+- Enhanced policy to provide detailed explanations for audit trails
 
-### 3. Complete Rate Limiting Implementation
+### 3. Dynamic Policy Loading and Updating
+- Created OpaPolicyService to dynamically load and update OPA policies
+- Added scheduled task to periodically check for policy updates
+- Configured policy path in application.properties
+- Enabled scheduling in PaymentAgentApplication
+
+### 4. Complete Rate Limiting Implementation
 - Configured Redis for rate limiting in application.properties
 - Enhanced RateLimiterConfig to support user-based rate limiting
 - Updated GatewayConfig to use Redis-based rate limiter with user keys
 - Added configurable rate limits per user
 
-### 4. Request Validation
+### 5. Request Validation
 - Created RequestValidationService for server-side validation
 - Added validation annotations to PurchaseRequest and OverrideRequest models
 - Integrated validation into PurchaseServiceImpl
@@ -42,9 +50,10 @@ This document summarizes the features implemented in this phase of the Payment A
 7. src/main/java/com/siemens/payment/agent/controller/GlobalExceptionHandler.java - New controller advice for handling errors
 8. src/main/java/com/siemens/payment/agent/model/PurchaseRequest.java - Added validation annotations
 9. src/main/java/com/siemens/payment/agent/model/OverrideRequest.java - Added validation annotations
-10. src/main/java/com/siemens/payment/agent/pep/PolicyEnforcementPoint.java - Enhanced to include user context
-11. src/main/java/com/siemens/payment/agent/PaymentAgentApplication.java - Enabled validation
-12. src/main/resources/application.properties - Added Redis configuration
-13. src/main/resources/policies/comprehensive_policy.rego - New comprehensive OPA policy
-14. example_policy.rego - Updated with comprehensive policy
-15. plan.md - Updated to reflect implemented features
+10. src/main/java/com/siemens/payment/agent/pep/PolicyEnforcementPoint.java - Enhanced to include user context and policy explanations
+11. src/main/java/com/siemens/payment/agent/PaymentAgentApplication.java - Enabled validation and scheduling
+12. src/main/java/com/siemens/payment/agent/service/OpaPolicyService.java - New service for dynamic policy loading
+13. src/main/resources/application.properties - Added Redis configuration and policy path
+14. src/main/resources/policies/comprehensive_policy.rego - New comprehensive OPA policy with explanations
+15. example_policy.rego - Updated with comprehensive policy with explanations
+16. plan.md - Updated to reflect implemented features

@@ -56,8 +56,9 @@ public class PurchaseServiceImpl implements PurchaseService {
             return response;
         }
 
-        boolean allowed = pep.evaluatePolicy(request, userId).block(); // Using block() for simplicity in this context.
-        logAuditEvent(transactionId, "POLICY_EVALUATION_COMPLETED", Map.of("allowed", allowed, "userId", userId));
+        PolicyEnforcementPoint.PolicyDecision decision = pep.evaluatePolicy(request, userId).block(); // Using block() for simplicity in this context.
+        boolean allowed = decision.isAllowed();
+        logAuditEvent(transactionId, "POLICY_EVALUATION_COMPLETED", Map.of("allowed", allowed, "userId", userId, "explanation", decision.getExplanation()));
 
         PurchaseResponse response = new PurchaseResponse();
         response.setTransactionId(transactionId);
@@ -88,7 +89,7 @@ public class PurchaseServiceImpl implements PurchaseService {
             response.setStatus("DENIED");
             response.setMessage("Purchase denied by policy. An override may be possible.");
             deniedTransactions.put(transactionId, request); // Store for potential override
-            logAuditEvent(transactionId, "PURCHASE_DENIED", response);
+            logAuditEvent(transactionId, "PURCHASE_DENIED", Map.of("message", response.getMessage(), "explanation", decision.getExplanation()));
         }
 
         return response;

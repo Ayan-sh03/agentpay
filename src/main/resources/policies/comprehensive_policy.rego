@@ -3,19 +3,79 @@ package payments
 # Default decision is to deny
 default allow = false
 
-# Allow purchases under spend cap
-allow {
+# Main policy result
+allow := count(deny_reasons) == 0
+
+# Default explanation
+default explanation = ["Purchase denied by default policy"]
+
+# Explanation for allowed purchases
+explanation = reasons {
+    allowed := count(deny_reasons) == 0
+    allowed == true
+    reasons := ["Purchase approved by policy"]
+}
+
+# Explanation for denied purchases
+explanation = reasons {
+    count(deny_reasons) > 0
+    reasons := deny_reasons
+}
+
+# Collect all deny reasons
+deny_reasons[reason] {
+    reason = check_spend_cap
+    reason != ""
+}
+
+deny_reasons[reason] {
+    reason = check_merchant_allowlist
+    reason != ""
+}
+
+deny_reasons[reason] {
+    reason = check_mcc
+    reason != ""
+}
+
+deny_reasons[reason] {
+    reason = check_kyc
+    reason != ""
+}
+
+# Check spend cap
+check_spend_cap := reason {
+    input.purchase.amount > get_spend_cap(input.user.id)
+    reason := sprintf("Purchase amount %v exceeds user spend cap of %v", [input.purchase.amount, get_spend_cap(input.user.id)])
+} else := "" {
     input.purchase.amount <= get_spend_cap(input.user.id)
 }
 
-# Deny purchases from blacklisted merchants
-allow = false {
-    input.purchase.merchant == "blacklisted_merchant"
+# Check merchant allowlist
+check_merchant_allowlist := reason {
+    not merchant_allowlist[input.purchase.merchant]
+    reason := sprintf("Merchant '%v' is not in the allowlist", [input.purchase.merchant])
+} else := "" {
+    merchant_allowlist[input.purchase.merchant]
 }
 
-# Deny purchases with certain MCC codes
-allow = false {
+# Check MCC codes
+check_mcc := reason {
     input.purchase.mcc == "illegal_mcc"
+    reason := "Purchase has forbidden MCC code"
+} else := "" {
+    input.purchase.mcc != "illegal_mcc"
+}
+
+# KYC check - require KYC for high-value transactions
+check_kyc := reason {
+    input.purchase.amount > 1000
+    not user_kyc_verified[input.user.id]
+    reason := "KYC verification required for high-value transactions"
+} else := "" {
+    input.purchase.amount <= 1000
+} else := "" {
+    user_kyc_verified[input.user.id]
 }
 
 # Get spend cap for a user (in a real implementation, this would come from a database)
@@ -36,21 +96,10 @@ user_spend_caps = {
 }
 
 # Merchant allowlist - only allow purchases from approved merchants
-allow {
-    merchant_allowlist[input.purchase.merchant]
-}
-
-# Approved merchants
 merchant_allowlist = {
     "approved_merchant_1",
     "approved_merchant_2",
     "trusted_retailer"
-}
-
-# KYC check - require KYC for high-value transactions
-allow = false {
-    input.purchase.amount > 1000
-    not user_kyc_verified[input.user.id]
 }
 
 # KYC status for users
