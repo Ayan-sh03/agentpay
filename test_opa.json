@@ -1,0 +1,1 @@
+{"input":{"purchase":{"userId":"user1","agentId":"agent-001","amount":100.0,"merchant":"approved_merchant_1","mcc":"1234","currency":"USD"},"user":{"id":"user1"}}} 

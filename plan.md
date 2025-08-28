@@ -66,11 +66,11 @@ tecture Overview
 - Add comprehensive security testing suite `[TODO]`
 - Enhance encryption mechanisms for sensitive data `[TODO]`
 
-### Phase 7: Policy Engine Enhancement `[IMPLEMENTED]`
+### Phase 7: Policy Engine Enhancement `[PARTIALLY IMPLEMENTED]`
 
 - Create comprehensive OPA policies for spend caps, merchant allowlists, MCC/KYC checks `[IMPLEMENTED]`
-- Implement dynamic policy loading and updating `[IMPLEMENTED]`
-- Add policy decision explanation for audit trails `[IMPLEMENTED]`
+- Implement dynamic policy loading and updating `[TODO]`
+- Add policy decision explanationadd  for audit trails `[TODO]`
 
 ### Phase 8: Rate Limiting & Performance `[PARTIALLY IMPLEMENTED]`
 
