@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
+import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -26,7 +27,7 @@ public class PurchaseController {
     }
 
     @PostMapping("/purchase/{transactionId}/override")
-    public PurchaseResponse overridePurchase(@PathVariable String transactionId, @Valid @RequestBody OverrideRequest overrideRequest) {
+    public Mono<PurchaseResponse> overridePurchase(@PathVariable String transactionId, @Valid @RequestBody OverrideRequest overrideRequest) {
         return purchaseService.overridePurchase(transactionId, overrideRequest);
     }
 }

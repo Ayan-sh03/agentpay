@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.support.WebExchangeBindException;
+import org.springframework.security.access.AccessDeniedException;
 
 @ControllerAdvice
 public class GlobalExceptionHandler {
@@ -26,5 +27,21 @@ public class GlobalExceptionHandler {
         response.setMessage("Invalid request: " + ex.getMessage());
         
         return ResponseEntity.badRequest().body(response);
+    }
+
+    @ExceptionHandler(SecurityException.class)
+    public ResponseEntity<PurchaseResponse> handleSecurityException(SecurityException ex) {
+        PurchaseResponse response = new PurchaseResponse();
+        response.setStatus("UNAUTHORIZED");
+        response.setMessage(ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<PurchaseResponse> handleAccessDenied(AccessDeniedException ex) {
+        PurchaseResponse response = new PurchaseResponse();
+        response.setStatus("FORBIDDEN");
+        response.setMessage("Access denied");
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
     }
 }
