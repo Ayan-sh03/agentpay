@@ -23,8 +23,12 @@ public class RequestValidationService {
             throw new IllegalArgumentException("Currency information is required");
         }
         
-        if (request.getMcc() == null || request.getMcc().trim().isEmpty()) {
-            throw new IllegalArgumentException("MCC (Merchant Category Code) is required");
+        if (request.getProductType() == null || request.getProductType().trim().isEmpty()) {
+            throw new IllegalArgumentException("Product type is required for agent purchases");
+        }
+        
+        if (request.getProductId() == null || request.getProductId().trim().isEmpty()) {
+            throw new IllegalArgumentException("Product ID is required for agent purchases");
         }
     }
 }

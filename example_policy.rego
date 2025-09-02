@@ -1,110 +1,113 @@
 package payments
 
-# Default decision is to deny
-default allow = false
+# Default decision is to deny for safety
+default allow := false
 
-# Main policy result
-allow := count(deny_reasons) == 0
+# Main policy result - agent is allowed if no deny reasons exist
+allow if {
+    count(deny_reasons) == 0
+}
 
 # Default explanation
-default explanation = ["Purchase denied by default policy"]
+default explanation := ["Purchase denied by default agent policy"]
 
 # Explanation for allowed purchases
-explanation = reasons {
-    allowed := count(deny_reasons) == 0
-    allowed == true
-    reasons := ["Purchase approved by policy"]
+explanation := ["Purchase approved for agent by policy"] if {
+    count(deny_reasons) == 0
 }
 
-# Explanation for denied purchases
-explanation = reasons {
+# Explanation for denied purchases  
+explanation := deny_reasons if {
     count(deny_reasons) > 0
-    reasons := deny_reasons
 }
 
-# Collect all deny reasons
-deny_reasons[reason] {
-    reason = check_spend_cap
+# Collect all deny reasons for agents
+deny_reasons contains reason if {
+    reason := check_agent_spend_limit
     reason != ""
 }
 
-deny_reasons[reason] {
-    reason = check_merchant_allowlist
+deny_reasons contains reason if {
+    reason := check_digital_goods_only
     reason != ""
 }
 
-deny_reasons[reason] {
-    reason = check_mcc
+deny_reasons contains reason if {
+    reason := check_agent_capabilities
     reason != ""
 }
 
-deny_reasons[reason] {
-    reason = check_kyc
+deny_reasons contains reason if {
+    reason := check_time_restrictions
     reason != ""
 }
 
-# Check spend cap
-check_spend_cap := reason {
-    input.purchase.amount > get_spend_cap(input.user.id)
-    reason := sprintf("Purchase amount %v exceeds user spend cap of %v", [input.purchase.amount, get_spend_cap(input.user.id)])
-} else := "" {
-    input.purchase.amount <= get_spend_cap(input.user.id)
+# Check agent spending limits
+check_agent_spend_limit := sprintf("Purchase amount %v exceeds agent limit of %v", [input.purchase.amount, get_agent_limit(input.user.id)]) if {
+    input.purchase.amount > get_agent_limit(input.user.id)
+} else := ""
+
+# Digital goods only policy for agents  
+check_digital_goods_only := sprintf("Agent can only purchase from digital goods merchants, '%v' is not allowed", [input.purchase.merchant]) if {
+    not is_digital_goods_merchant(input.purchase.merchant)
+} else := ""
+
+# Check agent capabilities
+check_agent_capabilities := sprintf("Agent lacks required capability for merchant '%v'", [input.purchase.merchant]) if {
+    not agent_has_capability(input.user.id, required_capability_for_merchant(input.purchase.merchant))
+} else := ""
+
+# Time-based restrictions for agents (e.g., no purchases during maintenance hours)
+check_time_restrictions := "Agent purchases restricted during maintenance window (2-4 AM UTC)" if {
+    hour := time.clock(time.now_ns())[0]
+    hour >= 2  # No purchases between 2-4 AM UTC (maintenance window)
+    hour < 4
+} else := ""
+
+# Get spending limit for agent with default fallback
+get_agent_limit(agent_id) := limit if {
+    limit := agent_limits[agent_id]
+} else := 500
+
+# Agent-specific spending limits
+agent_limits := {
+    "demo-agent-001": 1000,
+    "openai-agent-123": 2000,
+    "claude-agent-456": 1500,
+    "production-agent-789": 5000
 }
 
-# Check merchant allowlist
-check_merchant_allowlist := reason {
-    not merchant_allowlist[input.purchase.merchant]
-    reason := sprintf("Merchant '%v' is not in the allowlist", [input.purchase.merchant])
-} else := "" {
-    merchant_allowlist[input.purchase.merchant]
+# Digital goods merchants (courses, templates, designs, API credits)
+digital_goods_merchants := {
+    "udemy",
+    "coursera", 
+    "envato_market",
+    "creative_market",
+    "openai_api",
+    "anthropic_api",
+    "replicate_api",
+    "figma_templates",
+    "notion_templates"
 }
 
-# Check MCC codes
-check_mcc := reason {
-    input.purchase.mcc == "illegal_mcc"
-    reason := "Purchase has forbidden MCC code"
-} else := "" {
-    input.purchase.mcc != "illegal_mcc"
+# Helper function to check if merchant sells digital goods
+is_digital_goods_merchant(merchant) if {
+    digital_goods_merchants[merchant]
 }
 
-# KYC check - require KYC for high-value transactions
-check_kyc := reason {
-    input.purchase.amount > 1000
-    not user_kyc_verified[input.user.id]
-    reason := "KYC verification required for high-value transactions"
-} else := "" {
-    input.purchase.amount <= 1000
-} else := "" {
-    user_kyc_verified[input.user.id]
+# Agent capabilities mapping
+agent_capabilities := {
+    "demo-agent-001": ["digital_goods", "api_calls"],
+    "openai-agent-123": ["digital_goods", "api_calls", "subscriptions"], 
+    "claude-agent-456": ["digital_goods"]
 }
 
-# Get spend cap for a user (in a real implementation, this would come from a database)
-get_spend_cap(user_id) = cap {
-    user_spend_caps[user_id] = cap
+# Helper function to check agent capabilities
+agent_has_capability(agent_id, capability) if {
+    agent_capabilities[agent_id][_] == capability
 }
 
-# Default spend cap
-get_spend_cap(_) = 1000 {
-    true
-}
-
-# User-specific spend caps
-user_spend_caps = {
-    "user1": 5000,
-    "user2": 2000,
-    "admin": 10000
-}
-
-# Merchant allowlist - only allow purchases from approved merchants
-merchant_allowlist = {
-    "approved_merchant_1",
-    "approved_merchant_2",
-    "trusted_retailer"
-}
-
-# KYC status for users
-user_kyc_verified = {
-    "user1": true,
-    "user2": true,
-    "new_user": false
-}
+# Required capability for each merchant
+required_capability_for_merchant("openai_api") := "api_calls"
+required_capability_for_merchant("anthropic_api") := "api_calls"
+required_capability_for_merchant(_) := "digital_goods"

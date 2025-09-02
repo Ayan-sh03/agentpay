@@ -1,5 +1,7 @@
 package com.payment.payment.agent.service;
 
+import com.payment.payment.agent.model.AgentContext;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -8,13 +10,56 @@ import org.springframework.stereotype.Service;
 @Service
 public class AuthenticationContextService {
 
+    @Autowired
+    private AgentAuthenticationService agentAuthService;
+
     /**
-     * Extracts the current authenticated user ID from the security context
+     * Get current authenticated agent context
+     * This is the main method other services should use
+     */
+    public AgentContext getCurrentAgentContext() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        
+        if (auth != null && auth.getPrincipal() instanceof Jwt jwt) {
+            return agentAuthService.extractAgentContext((io.jsonwebtoken.Claims) jwt.getClaims());
+        }
+        
+        // For development/testing - remove in production
+        return createDemoAgentContext();
+    }
+    
+    /**
+     * Get current agent ID (backward compatibility)
      */
     public String getCurrentUserId() {
-        String userId = "user1";
-        System.out.println("AuthenticationContextService.getCurrentUserId() returning: " + userId);
-        return userId;
+        return getCurrentAgentContext().getAgentId();
+    }
+    
+    /**
+     * Get current agent owner ID  
+     */
+    public String getCurrentOwnerId() {
+        return getCurrentAgentContext().getOwnerId();
+    }
+
+    /**
+     * Demo agent context for development
+     * TODO: Remove this in production
+     */
+    private AgentContext createDemoAgentContext() {
+        return AgentContext.builder()
+            .agentId("demo-agent-001")
+            .agentName("Demo Shopping Agent")
+            .agentType("demo-bot")
+            .ownerId("dev-123")
+            .ownerEmail("developer@example.com")
+            .capabilities(java.util.Set.of("digital_goods", "api_calls"))
+            .dailySpendLimit(1000.0)
+            .monthlySpendLimit(5000.0)
+            .perTransactionLimit(500.0)
+            .accessLevel("sandbox")
+            .isActive(true)
+            .build();
     }
 
     /**

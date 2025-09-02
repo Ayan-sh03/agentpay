@@ -24,9 +24,6 @@ public class PurchaseServiceImpl implements PurchaseService {
     private AuditService auditService;
 
     @Autowired
-    private WebAuthnService webAuthnService;
-    
-    @Autowired
     private RequestValidationService requestValidationService;
 
     @Autowired
@@ -45,8 +42,8 @@ public class PurchaseServiceImpl implements PurchaseService {
         System.out.println("Transaction ID: " + transactionId);
         System.out.println("Request: " + request);
 
-        String userId = authenticationContextService.getCurrentUserId();
-        System.out.println("User ID: " + userId);
+        String agentId = authenticationContextService.getCurrentUserId(); // TODO: Rename this method
+        System.out.println("Agent ID: " + agentId);
 
         logAuditEvent(transactionId, "PURCHASE_REQUEST_RECEIVED", request);
         System.out.println("Audit event logged: PURCHASE_REQUEST_RECEIVED");
@@ -67,49 +64,29 @@ public class PurchaseServiceImpl implements PurchaseService {
         }
 
         System.out.println("Calling policy evaluation...");
-        return pep.evaluatePolicy(request, userId)
+        return pep.evaluatePolicy(request, agentId)
             .map(decision -> {
                 boolean allowed = decision.isAllowed();
                 System.out.println("=== POLICY EVALUATION RESULT ===");
                 System.out.println("Allowed: " + allowed);
                 System.out.println("Explanation: " + decision.getExplanation());
-                System.out.println("User ID: " + userId);
+                System.out.println("Agent ID: " + agentId);
 
-                logAuditEvent(transactionId, "POLICY_EVALUATION_COMPLETED", Map.of("allowed", allowed, "userId", userId, "explanation", decision.getExplanation()));
+                logAuditEvent(transactionId, "POLICY_EVALUATION_COMPLETED", Map.of("allowed", allowed, "agentId", agentId, "explanation", decision.getExplanation()));
 
                 PurchaseResponse response = new PurchaseResponse();
                 response.setTransactionId(transactionId);
 
                 if (allowed) {
-                    System.out.println("Purchase allowed, checking step-up authentication...");
-                    boolean stepUpRequired = webAuthnService.isStepUpRequired(transactionId, request);
-                    System.out.println("Step-up required: " + stepUpRequired);
-                    logAuditEvent(transactionId, "STEP_UP_AUTHENTICATION_CHECK", Map.of("required", stepUpRequired));
-
-                    if (stepUpRequired) {
-                        System.out.println("Performing step-up authentication...");
-                        boolean authenticated = webAuthnService.performStepUpAuthentication(userId);
-                        System.out.println("Step-up authentication result: " + authenticated);
-                        logAuditEvent(transactionId, "STEP_UP_AUTHENTICATION_RESULT", Map.of("authenticated", authenticated));
-
-                        if (!authenticated) {
-                            System.out.println("Step-up authentication failed, denying purchase");
-                            response.setStatus("DENIED");
-                            response.setMessage("Purchase denied due to failed step-up authentication.");
-                            logAuditEvent(transactionId, "PURCHASE_DENIED_STEP_UP_FAILED", response);
-                            System.out.println("Returning step-up failed response: " + response);
-                            return response;
-                        }
-                    }
-
-                    System.out.println("Purchase approved");
+                    // For agents, no step-up auth needed - just process payment
+                    System.out.println("Purchase approved by policy - processing payment");
                     response.setStatus("APPROVED");
-                    response.setMessage("Purchase approved by policy.");
+                    response.setMessage("Purchase approved by policy and ready for payment processing.");
                     logAuditEvent(transactionId, "PURCHASE_APPROVED", response);
                 } else {
                     System.out.println("Purchase denied by policy");
                     response.setStatus("DENIED");
-                    response.setMessage("Purchase denied by policy. An override may be possible.");
+                    response.setMessage("Purchase denied by policy. Owner approval may be possible.");
                     deniedTransactions.put(transactionId, request);
                     logAuditEvent(transactionId, "PURCHASE_DENIED", Map.of("message", response.getMessage(), "explanation", decision.getExplanation()));
                 }
