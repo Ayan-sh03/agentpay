@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class PurchaseServiceImpl implements PurchaseService {
@@ -30,6 +32,7 @@ public class PurchaseServiceImpl implements PurchaseService {
     private AuthenticationContextService authenticationContextService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final Logger log = LoggerFactory.getLogger(PurchaseServiceImpl.class);
 
     // In a production scenario, this would be a distributed cache like Redis or a persistent store.
     // This map stores denied transaction IDs and their corresponding original purchase requests.
@@ -38,39 +41,34 @@ public class PurchaseServiceImpl implements PurchaseService {
     @Override
     public reactor.core.publisher.Mono<PurchaseResponse> processPurchase(PurchaseRequest request) {
         String transactionId = UUID.randomUUID().toString();
-        System.out.println("=== PURCHASE PROCESS START ===");
-        System.out.println("Transaction ID: " + transactionId);
-        System.out.println("Request: " + request);
+        log.info("purchase:start txId={}, request={}", transactionId, safeToString(request));
 
         String agentId = authenticationContextService.getCurrentUserId(); // TODO: Rename this method
-        System.out.println("Agent ID: " + agentId);
+        log.debug("agentId: {}", agentId);
 
         logAuditEvent(transactionId, "PURCHASE_REQUEST_RECEIVED", request);
-        System.out.println("Audit event logged: PURCHASE_REQUEST_RECEIVED");
+        log.debug("audit: PURCHASE_REQUEST_RECEIVED");
 
         try {
-            System.out.println("Starting request validation...");
+            log.debug("validation:start");
             requestValidationService.validatePurchaseRequest(request);
-            System.out.println("Request validation passed");
+            log.debug("validation:ok");
         } catch (IllegalArgumentException e) {
-            System.out.println("Request validation failed: " + e.getMessage());
+            log.warn("validation:failed txId={}, reason={}", transactionId, e.getMessage());
             PurchaseResponse response = new PurchaseResponse();
             response.setTransactionId(transactionId);
             response.setStatus("INVALID_REQUEST");
             response.setMessage("Invalid purchase request: " + e.getMessage());
             logAuditEvent(transactionId, "PURCHASE_REQUEST_INVALID", Map.of("error", e.getMessage()));
-            System.out.println("Returning invalid request response: " + response);
+            log.info("purchase:end txId={} status={} message={}", transactionId, response.getStatus(), response.getMessage());
             return reactor.core.publisher.Mono.just(response);
         }
 
-        System.out.println("Calling policy evaluation...");
+        log.debug("policy:evaluate:start txId={}", transactionId);
         return pep.evaluatePolicy(request, agentId)
             .map(decision -> {
                 boolean allowed = decision.isAllowed();
-                System.out.println("=== POLICY EVALUATION RESULT ===");
-                System.out.println("Allowed: " + allowed);
-                System.out.println("Explanation: " + decision.getExplanation());
-                System.out.println("Agent ID: " + agentId);
+                log.info("policy:evaluate:result txId={} allowed={} explanation={}", transactionId, allowed, decision.getExplanation());
 
                 logAuditEvent(transactionId, "POLICY_EVALUATION_COMPLETED", Map.of("allowed", allowed, "agentId", agentId, "explanation", decision.getExplanation()));
 
@@ -79,22 +77,29 @@ public class PurchaseServiceImpl implements PurchaseService {
 
                 if (allowed) {
                     // For agents, no step-up auth needed - just process payment
-                    System.out.println("Purchase approved by policy - processing payment");
+                    log.info("purchase:approved txId={}", transactionId);
                     response.setStatus("APPROVED");
                     response.setMessage("Purchase approved by policy and ready for payment processing.");
                     logAuditEvent(transactionId, "PURCHASE_APPROVED", response);
                 } else {
-                    System.out.println("Purchase denied by policy");
+                    log.info("purchase:denied txId={} explanation={}", transactionId, decision.getExplanation());
                     response.setStatus("DENIED");
                     response.setMessage("Purchase denied by policy. Owner approval may be possible.");
                     deniedTransactions.put(transactionId, request);
                     logAuditEvent(transactionId, "PURCHASE_DENIED", Map.of("message", response.getMessage(), "explanation", decision.getExplanation()));
                 }
 
-                System.out.println("Final response: " + response);
-                System.out.println("=== PURCHASE PROCESS END ===");
+                log.info("purchase:end txId={} status={} message={}", transactionId, response.getStatus(), response.getMessage());
                 return response;
             });
+    }
+
+    private String safeToString(PurchaseRequest request) {
+        try {
+            return objectMapper.writeValueAsString(request);
+        } catch (JsonProcessingException e) {
+            return String.valueOf(request);
+        }
     }
 
     @Override

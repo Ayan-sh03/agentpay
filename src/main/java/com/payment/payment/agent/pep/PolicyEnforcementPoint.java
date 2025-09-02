@@ -8,6 +8,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Component
 public class PolicyEnforcementPoint {
@@ -15,14 +17,16 @@ public class PolicyEnforcementPoint {
     @Autowired
     private WebClient opaWebClient;
 
+    private static final Logger log = LoggerFactory.getLogger(PolicyEnforcementPoint.class);
+
     public Mono<PolicyDecision> evaluatePolicy(PurchaseRequest request, String userId) {
-        System.out.println("=== OPA POLICY EVALUATION START ===");
-        System.out.println("Request: " + request);
-        System.out.println("User ID: " + userId);
+        log.debug("=== OPA POLICY EVALUATION START ===");
+        log.debug("Request: {}", request);
+        log.debug("User ID: {}", userId);
 
         // This is a simplified request to OPA. In a real scenario, you would send more context.
         OpaRequest opaRequest = new OpaRequest(new OpaInput(request, userId));
-        System.out.println("OPA Request: " + opaRequest);
+        log.debug("OPA Request prepared");
 
         return opaWebClient.post()
                 .uri("/v1/data/payments")
@@ -30,17 +34,18 @@ public class PolicyEnforcementPoint {
                 .retrieve()
                 .bodyToMono(OpaResponse.class)
                 .map(response -> {
-                    System.out.println("OPA Response: " + response);
+                    log.debug("OPA Response received: {}", response);
                     PolicyDecision decision = convertToPolicyDecision(response);
-                    System.out.println("Converted decision: " + decision.isAllowed() + ", explanation: " + decision.getExplanation());
-                    System.out.println("=== OPA POLICY EVALUATION END ===");
+                    log.info("OPA decision: allowed={}, explanation={}", decision.isAllowed(), decision.getExplanation());
+                    log.debug("=== OPA POLICY EVALUATION END ===");
                     return decision;
                 })
                 .onErrorResume(throwable -> {
-                    System.out.println("OPA evaluation error: " + throwable.getMessage());
-                    PolicyDecision errorDecision = createErrorDecision();
-                    System.out.println("Error decision: " + errorDecision.isAllowed() + ", explanation: " + errorDecision.getExplanation());
-                    System.out.println("=== OPA POLICY EVALUATION END (ERROR) ===");
+                    log.error("OPA evaluation error", throwable);
+                    String reason = sanitizeErrorMessage(throwable.getMessage());
+                    PolicyDecision errorDecision = createErrorDecision("OPA unavailable: " + reason);
+                    log.warn("Policy fallback decision: allowed={}, explanation={}", errorDecision.isAllowed(), errorDecision.getExplanation());
+                    log.debug("=== OPA POLICY EVALUATION END (ERROR) ===");
                     return Mono.just(errorDecision);
                 });
     }
@@ -57,11 +62,23 @@ public class PolicyEnforcementPoint {
         return decision;
     }
     
-    private PolicyDecision createErrorDecision() {
+    private PolicyDecision createErrorDecision(String reason) {
         PolicyDecision decision = new PolicyDecision();
         decision.setAllowed(false);
-        decision.setExplanation(List.of("Policy evaluation failed due to system error"));
+        decision.setExplanation(List.of(reason != null && !reason.isBlank() ? reason : "Policy evaluation failed due to system error"));
         return decision;
+    }
+
+    private String sanitizeErrorMessage(String message) {
+        if (message == null) {
+            return "unknown error";
+        }
+        // Keep concise, avoid leaking stack traces or internal addresses
+        String trimmed = message.replaceAll("\n|\r", " ").trim();
+        if (trimmed.length() > 200) {
+            return trimmed.substring(0, 200) + "...";
+        }
+        return trimmed;
     }
 
     // Helper classes for OPA request and response

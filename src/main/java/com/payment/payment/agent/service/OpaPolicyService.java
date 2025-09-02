@@ -14,6 +14,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
 
 @Service
 public class OpaPolicyService {
@@ -31,6 +34,7 @@ public class OpaPolicyService {
     private String policyPath;
     
     private String currentPolicy;
+    private static final Logger log = LoggerFactory.getLogger(OpaPolicyService.class);
     
     @PostConstruct
     public void loadInitialPolicy() {
@@ -38,7 +42,7 @@ public class OpaPolicyService {
             loadPolicyFromPath();
             updateOpaPolicy();
         } catch (Exception e) {
-            System.err.println("Failed to load initial OPA policy: " + e.getMessage());
+            log.warn("opa:policy:init failed: {}", e.getMessage());
         }
     }
     
@@ -54,13 +58,20 @@ public class OpaPolicyService {
         
         opaWebClient.put()
             .uri("/v1/policies/" + policyName)
-            .body(Mono.just(new PolicyUpdateRequest(currentPolicy)), PolicyUpdateRequest.class)
-            .retrieve()
-            .bodyToMono(String.class)
-            .subscribe(
-                response -> System.out.println("Policy updated successfully"),
-                error -> System.err.println("Failed to update policy: " + error.getMessage())
-            );
+            .contentType(MediaType.TEXT_PLAIN)
+            .bodyValue(currentPolicy)
+            .exchangeToMono(clientResponse -> {
+                if (clientResponse.statusCode().is2xxSuccessful()) {
+                    return clientResponse.bodyToMono(String.class)
+                        .defaultIfEmpty("")
+                        .doOnNext(body -> log.info("opa:policy:update success"));
+                }
+                return clientResponse.bodyToMono(String.class)
+                    .defaultIfEmpty("")
+                    .doOnNext(body -> log.warn("opa:policy:update failed: status={} body={}", clientResponse.statusCode(), body))
+                    .then(Mono.empty());
+            })
+            .subscribe();
     }
     
     // Scheduled task to periodically check for policy updates
@@ -72,11 +83,11 @@ public class OpaPolicyService {
             
             // If policy has changed, update OPA
             if (!currentPolicy.equals(previousPolicy)) {
-                System.out.println("Policy change detected, updating OPA...");
+                log.info("opa:policy:change detected -> updating");
                 updateOpaPolicy();
             }
         } catch (Exception e) {
-            System.err.println("Failed to check for policy updates: " + e.getMessage());
+            log.warn("opa:policy:check failed: {}", e.getMessage());
         }
     }
     
@@ -84,16 +95,5 @@ public class OpaPolicyService {
         return currentPolicy;
     }
     
-    // Helper class for policy update request
-    private static class PolicyUpdateRequest {
-        private final String policy;
-        
-        public PolicyUpdateRequest(String policy) {
-            this.policy = policy;
-        }
-        
-        public String getPolicy() {
-            return policy;
-        }
-    }
+    // Removed JSON wrapper; OPA expects raw Rego text for policy PUT
 }

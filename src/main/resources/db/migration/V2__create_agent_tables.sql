@@ -14,15 +14,16 @@ CREATE TABLE IF NOT EXISTS agent_credentials (
     capabilities VARCHAR(500)  -- comma-separated capabilities
 );
 
--- Index for fast API key lookups during authentication
+-- Index for fast API key lookups during authentication (H2 compatible)
 CREATE INDEX IF NOT EXISTS idx_agent_credentials_api_key_hash 
-ON agent_credentials(api_key_hash) WHERE is_active = true;
+ON agent_credentials(api_key_hash);
 
--- Index for owner queries
+-- Index for owner queries (H2 compatible) 
 CREATE INDEX IF NOT EXISTS idx_agent_credentials_owner 
-ON agent_credentials(owner_id) WHERE is_active = true;
+ON agent_credentials(owner_id);
 
--- Insert demo agent for testing
+-- Insert demo agent for testing (H2 compatible syntax)
+-- API key "test" has hashCode() = 3556498 (Java String.hashCode()) 
 INSERT INTO agent_credentials (
     agent_id, 
     owner_id, 
@@ -32,13 +33,6 @@ INSERT INTO agent_credentials (
     monthly_spend_limit, 
     per_transaction_limit, 
     capabilities
-) VALUES (
-    'demo-agent-001',
-    'dev-123', 
-    '1234567890',  -- Hash of 'demo-key'
-    'demo-bot',
-    1000.00,
-    5000.00, 
-    500.00,
-    'digital_goods,api_calls'
-) ON CONFLICT (agent_id) DO NOTHING;
+) 
+SELECT 'demo-agent-001', 'dev-123', '3556498', 'demo-bot', 1000.00, 5000.00, 500.00, 'digital_goods,api_calls'
+WHERE NOT EXISTS (SELECT 1 FROM agent_credentials WHERE agent_id = 'demo-agent-001');
