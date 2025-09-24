@@ -28,7 +28,7 @@ public class AgentAuthController {
     @PostMapping("/token")
     public ResponseEntity<AuthResponse> authenticateAgent(@Valid @RequestBody AuthRequest request) {
         return agentAuthService.authenticateAgent(request.getApiKey())
-            .map(jwt -> ResponseEntity.ok(new AuthResponse(jwt, "Bearer", 3600)))
+            .map(jwt -> ResponseEntity.ok(new AuthResponse(jwt, "Bearer", agentAuthService.getJwtExpirationSeconds())))
             .orElse(ResponseEntity.status(401)
                 .body(new AuthResponse(null, null, 0, "Invalid API key")));
     }

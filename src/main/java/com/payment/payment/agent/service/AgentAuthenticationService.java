@@ -7,17 +7,24 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import jakarta.annotation.PostConstruct;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Optional;
+import java.util.Base64;
+import java.util.UUID;
 
 /**
  * Handles agent authentication using API keys and JWT tokens
@@ -32,11 +39,73 @@ public class AgentAuthenticationService {
     @Value("${app.jwt.secret:default-secret-key-change-in-production}")
     private String jwtSecret;
 
+    @Value("${app.jwt.issuer:}")
+    private String jwtIssuer;
+
+    @Value("${app.jwt.audience:}")
+    private String jwtAudience;
+
     @Value("${app.jwt.expiration:3600}")  // 1 hour default
     private int jwtExpirationSeconds;
 
+    @Value("${app.auth.clockSkewSeconds:60}")
+    private long clockSkewSeconds;
+
+    @Value("${app.apikey.hmacSecret:}")
+    private String apiKeyHmacSecret;
+
+    @Value("${app.apikey.allowLegacyHash:false}")
+    private boolean allowLegacyApiKeyHash;
+
+    private static final int MIN_SECRET_BYTES = 32; // 256-bit
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(AgentAuthenticationService.class);
+
+    private SecretKey jwtSigningKey;
+    private Mac apiKeyMac;
+
+    @PostConstruct
+    void initialize() {
+        // Initialize JWT signing key
+        byte[] jwtSecretBytes = decodeIfBase64ElseUtf8(jwtSecret);
+        if (jwtSecretBytes == null || jwtSecretBytes.length < MIN_SECRET_BYTES ||
+            "default-secret-key-change-in-production".equals(jwtSecret)) {
+            throw new IllegalStateException("Invalid app.jwt.secret configured; must be base64 or utf-8 with >= 32 bytes and not default");
+        }
+        this.jwtSigningKey = Keys.hmacShaKeyFor(jwtSecretBytes);
+
+        if (isBlank(jwtIssuer) || isBlank(jwtAudience)) {
+            throw new IllegalStateException("app.jwt.issuer and app.jwt.audience must be configured");
+        }
+
+        // Initialize API key HMAC
+        byte[] apiKeySecretBytes = decodeIfBase64ElseUtf8(apiKeyHmacSecret);
+        if (apiKeySecretBytes == null || apiKeySecretBytes.length < MIN_SECRET_BYTES) {
+            throw new IllegalStateException("Invalid app.apikey.hmacSecret configured; must be base64 or utf-8 with >= 32 bytes");
+        }
+        try {
+            this.apiKeyMac = Mac.getInstance("HmacSHA256");
+            this.apiKeyMac.init(new SecretKeySpec(apiKeySecretBytes, "HmacSHA256"));
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to initialize API key HMAC", e);
+        }
+    }
+
+    private boolean isBlank(String s) { return s == null || s.trim().isEmpty(); }
+
+    private byte[] decodeIfBase64ElseUtf8(String value) {
+        if (value == null) return null;
+        try {
+            // Accept base64 (std) without padding issues
+            return Base64.getDecoder().decode(value);
+        } catch (IllegalArgumentException e) {
+            // Not base64: fall back to utf-8 bytes
+            return value.getBytes(StandardCharsets.UTF_8);
+        }
+    }
+
     private SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(jwtSecret.getBytes());
+        return this.jwtSigningKey;
     }
 
     /**
@@ -48,13 +117,22 @@ public class AgentAuthenticationService {
             return Optional.empty();
         }
 
-        // Hash the API key for lookup (in production, use proper password hashing)
-        String apiKeyHash = hashApiKey(apiKey);
-        
+        String trimmedKey = apiKey.trim();
+
+        // Secure deterministic API key hash using HMAC-SHA256 (peppered)
+        String apiKeyHash = hashApiKey(trimmedKey);
+
         Optional<AgentCredentials> agentOpt = agentRepository
             .findByApiKeyHashAndIsActive(apiKeyHash, true);
-        
+
+        // Optional backward compatibility with legacy demo hash
+        if (agentOpt.isEmpty() && allowLegacyApiKeyHash) {
+            String legacyHash = legacyHashApiKey(trimmedKey);
+            agentOpt = agentRepository.findByApiKeyHashAndIsActive(legacyHash, true);
+        }
+
         if (agentOpt.isEmpty()) {
+            LOGGER.warn("Agent authentication failed: API key not recognized");
             return Optional.empty();
         }
 
@@ -66,6 +144,7 @@ public class AgentAuthenticationService {
 
         // Create JWT with agent claims
         String jwt = createAgentJwt(agent);
+        LOGGER.info("Issued JWT for agentId={}", agent.getAgentId());
         return Optional.of(jwt);
     }
 
@@ -78,7 +157,11 @@ public class AgentAuthenticationService {
         Date expiry = new Date(now.getTime() + (jwtExpirationSeconds * 1000L));
 
         return Jwts.builder()
+            .setId(UUID.randomUUID().toString())
             .setSubject(agent.getAgentId())  // Agent ID as subject
+            .setIssuer(jwtIssuer)
+            .setAudience(jwtAudience)
+            .setNotBefore(now)
             .claim("agent_id", agent.getAgentId())
             .claim("owner_id", agent.getOwnerId())
             .claim("agent_type", agent.getAgentType())
@@ -86,7 +169,7 @@ public class AgentAuthenticationService {
             .claim("daily_spend_limit", agent.getDailySpendLimit())
             .claim("monthly_spend_limit", agent.getMonthlySpendLimit())
             .claim("per_transaction_limit", agent.getPerTransactionLimit())
-            .claim("access_level", "production")  // Default for now
+            .claim("access_level", "production")
             .setIssuedAt(now)
             .setExpiration(expiry)
             .signWith(getSigningKey(), SignatureAlgorithm.HS256)
@@ -121,9 +204,32 @@ public class AgentAuthenticationService {
      * Simple API key hashing (use bcrypt in production)
      */
     private String hashApiKey(String apiKey) {
-        // For demo purposes, use simple hash
-        // In production, use BCryptPasswordEncoder
+        try {
+            Mac mac = (Mac) apiKeyMac.clone();
+            byte[] digest = mac.doFinal(apiKey.getBytes(StandardCharsets.UTF_8));
+            return toHex(digest);
+        } catch (CloneNotSupportedException e) {
+            // Fallback to synchronized use if clone not supported
+            synchronized (this) {
+                byte[] digest = apiKeyMac.doFinal(apiKey.getBytes(StandardCharsets.UTF_8));
+                return toHex(digest);
+            }
+        }
+    }
+
+    private String legacyHashApiKey(String apiKey) {
         return String.valueOf(apiKey.hashCode());
+    }
+
+    private String toHex(byte[] bytes) {
+        char[] HEX = "0123456789abcdef".toCharArray();
+        char[] out = new char[bytes.length * 2];
+        for (int i = 0, j = 0; i < bytes.length; i++) {
+            int v = bytes[i] & 0xFF;
+            out[j++] = HEX[v >>> 4];
+            out[j++] = HEX[v & 0x0F];
+        }
+        return new String(out);
     }
 
     /**
@@ -134,13 +240,21 @@ public class AgentAuthenticationService {
         try {
             Claims claims = Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())
+                .setAllowedClockSkewSeconds(clockSkewSeconds)
+                .requireIssuer(jwtIssuer)
+                .requireAudience(jwtAudience)
                 .build()
                 .parseClaimsJws(jwt)
                 .getBody();
 
             return Optional.of(extractAgentContext(claims));
         } catch (Exception e) {
+            LOGGER.warn("JWT validation failed: {}", e.getClass().getSimpleName());
             return Optional.empty();
         }
+    }
+
+    public int getJwtExpirationSeconds() {
+        return jwtExpirationSeconds;
     }
 }
