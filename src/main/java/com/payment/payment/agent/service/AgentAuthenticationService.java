@@ -125,12 +125,6 @@ public class AgentAuthenticationService {
         Optional<AgentCredentials> agentOpt = agentRepository
             .findByApiKeyHashAndIsActive(apiKeyHash, true);
 
-        // Optional backward compatibility with legacy demo hash
-        if (agentOpt.isEmpty() && allowLegacyApiKeyHash) {
-            String legacyHash = legacyHashApiKey(trimmedKey);
-            agentOpt = agentRepository.findByApiKeyHashAndIsActive(legacyHash, true);
-        }
-
         if (agentOpt.isEmpty()) {
             LOGGER.warn("Agent authentication failed: API key not recognized");
             return Optional.empty();
@@ -215,10 +209,6 @@ public class AgentAuthenticationService {
                 return toHex(digest);
             }
         }
-    }
-
-    private String legacyHashApiKey(String apiKey) {
-        return String.valueOf(apiKey.hashCode());
     }
 
     private String toHex(byte[] bytes) {

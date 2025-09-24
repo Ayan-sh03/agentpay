@@ -143,8 +143,44 @@ opa.url=http://127.0.0.1:8181
 app.jwt.secret=change-me-in-production-secret-key-32-chars
 app.jwt.expiration=3600
 
+# Strong JWT metadata
+app.jwt.issuer=payment-gateway
+app.jwt.audience=payment-agents
+
+# API Key HMAC (pepper)
+app.apikey.hmacSecret=change-me-very-strong-32B
+app.apikey.allowLegacyHash=false
+
+# Auth Clock Skew
+app.auth.clockSkewSeconds=60
+
 # Encryption
 app.encryption.key=change-me-in-production-32-chars
+```
+
+## Environment Variables
+
+You can configure the same settings via environment variables (Spring Boot relaxed binding).
+
+### Windows PowerShell
+```powershell
+$env:APP_APIKEY_HMACSECRET       = "this-is-a-very-strong-32B-secret-1234"
+$env:APP_JWT_SECRET              = "change-me-very-strong-32B-or-base64"
+$env:APP_JWT_ISSUER              = "payment-gateway"
+$env:APP_JWT_AUDIENCE            = "payment-agents"
+$env:APP_AUTH_CLOCKSKEWSECONDS   = "60"
+
+```
+
+### Bash (Linux/Mac)
+```bash
+export APP_APIKEY_HMACSECRET="this-is-a-very-strong-32B-secret-1234"
+export APP_JWT_SECRET="change-me-very-strong-32B-or-base64"
+export APP_JWT_ISSUER="payment-gateway"
+export APP_JWT_AUDIENCE="payment-agents"
+export APP_AUTH_CLOCKSKEWSECONDS=60
+
+
 ```
 
 ### Production Configuration
