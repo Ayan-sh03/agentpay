@@ -22,8 +22,7 @@ A production-ready Spring Boot WebFlux application for AI agents to make purchas
 ## Installation
 
 ```bash
-# Clone the repository
-git clone <repository-url>
+Clone the repository
 cd payment-agent
 
 # Build the project
@@ -215,7 +214,3 @@ mvnw test
 ```bash
 mvnw clean package
 ```
-
-## Implementation Progress
-
-See [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) for details on what's been implemented and what's still pending.
